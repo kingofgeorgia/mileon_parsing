@@ -22,17 +22,6 @@ A Python-based Telegram monitoring and content relay system that automatically f
    - Formats and republishes to target channels
    - Maintains deduplication with message ID tracking
 
-2. **TG_Parser.py** - Live Monitoring Dashboard
-   - Real-time display of filtered car listings
-   - Rich terminal UI with formatted tables
-   - Multi-channel monitoring in a single view
-   - Updates at configurable intervals
-
-3. **live_moniitoring.py** - Integrated Monitor
-   - Combined monitoring with FastAPI web API
-   - Telegram bot integration for notifications
-   - HTTP endpoints for external integrations
-
 ## Installation
 
 ### Prerequisites
@@ -96,18 +85,6 @@ python parsing.py
 ```
 Continuously monitors source channels and relays matching listings.
 
-### Run Monitoring Dashboard
-```bash
-python TG_Parser.py
-```
-Displays live-filtered listings in an interactive terminal dashboard.
-
-### Run Integrated Monitor
-```bash
-python live_moniitoring.py
-```
-Starts monitoring with web API and bot notifications.
-
 ## Architecture
 
 ```
@@ -145,30 +122,11 @@ def match_filters(text: str) -> bool:
     return True
 ```
 
-## API Reference (live_moniitoring.py)
-
-FastAPI endpoints available:
-- `GET /listings` - Get current filtered listings
-- `GET /listings/{channel}` - Get listings from specific channel
-- `POST /settings` - Update filter configuration
-- `GET/POST /notifications` - Manage notifications
-
-## Telegram Bot Integration
-
-Set up bot notifications in `live_moniitoring.py`:
-```python
-TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN"
-NOTIFICATION_CHAT_ID = YOUR_CHAT_ID
-```
-
 ## Dependencies
 
 ```
 telethon>=1.0        # Telegram client library
-rich>=10.0          # Terminal UI formatting
-fastapi>=0.68       # Web framework
-python-telebot>=3.0 # Telegram bot integration
-openai>=0.27        # OpenAI integration
+openai>=0.27         # OpenAI integration
 ```
 
 ## Session Management
