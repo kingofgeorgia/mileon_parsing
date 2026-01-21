@@ -9,7 +9,7 @@ from openai import OpenAI
 api_id = 34277624
 api_hash = "3906edabc2198a97d68878633496809d"
 
-SOURCE_CHANNEL = "mileoncars"
+SOURCE_CHANNEL = "garageneva"
 TARGET_CHANNEL = "garagesale_dighomi"
 UPDATE_INTERVAL = 20  # секунд
 
@@ -17,7 +17,7 @@ UPDATE_INTERVAL = 20  # секунд
 OPENAI_API_KEY = "your-openai-api-key-here"  # Replace with your actual API key
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-CAR_BRANDS = ["BMW", "Mercedes", "Toyota", "Audi", "Porsche"]
+CAR_BRANDS = ["BMW", "Mercedes", "Toyota", "Audi", "Porsche", "Volkswagen", "Honda", "Ford", "Chevrolet", "Tesla", "Lexus", "Jaguar", "Land Rover", "Range Rover", "Volvo", "Nissan", "Mazda", "Subaru", "Hyundai", "Kia"]
 CURRENCIES = ["$", "€", "₽", "USD", "EUR"]
 PRICE_PATTERN = re.compile(r"(\d[\d\s]{3,})\s*(" + "|".join(CURRENCIES) + ")", re.IGNORECASE)
 
@@ -45,31 +45,37 @@ def parse_car_info(text: str) -> dict:
         'drive': '—',
         'mileage': '—',
         'price': '—',
-        'price_num': 0
+        'price_num': 0,
+        'exchange_rate': '—'
     }
     if not text:
         return info
     
-    # Берём первую строку для анализа
+    # Ищем первую строку, которая содержит марку автомобиля
     first_line = text.split('\n')[0]
+    car_line = first_line
     
-    # Логика парсинга: [Год] [Марка] [Модель + Комплектация]
-    # Например: "2025 Mercedes-Benz GLS 450d 4MATIC"
+    # Если марка не в первой строке, ищем её во всех строках
+    if not any(brand.lower() in first_line.lower() for brand in CAR_BRANDS):
+        for line in text.split('\n'):
+            if any(brand.lower() in line.lower() for brand in CAR_BRANDS):
+                car_line = line
+                break
     
-    # 1. Ищем год в начале строки
-    year_match = re.search(r'^(\d{4})\s+', first_line)
+    # Ищем год в начале строки
+    year_match = re.search(r'^(\d{4})\s+', car_line)
     if year_match:
         info['year'] = year_match.group(1)
         # Убираем год из строки для дальнейшего парсинга
-        remaining_text = first_line[year_match.end():]
+        remaining_text = car_line[year_match.end():]
     else:
         # Если год не в начале, ищем его везде в тексте
         year_match = re.search(r'\b(19\d{2}|20\d{2})\b', text)
         if year_match:
             info['year'] = year_match.group(1)
-        remaining_text = first_line
+        remaining_text = car_line
     
-    # 2. Ищем марку в оставшемся тексте
+    # Ищем марку и всё после неё - это марка + модель
     for brand in CAR_BRANDS:
         if brand.lower() in remaining_text.lower():
             info['brand'] = brand
@@ -77,19 +83,10 @@ def parse_car_info(text: str) -> dict:
             brand_pos = remaining_text.lower().find(brand.lower())
             after_brand = remaining_text[brand_pos + len(brand):].strip()
             
-            # 3. Всё, что осталось после марки - это модель и комплектация
+            # Всё, что осталось после марки - это модель
             if after_brand:
-                # Убираем ненужные символы в конце (тире, запятые и т.д.)
-                model = after_brand.split('—')[0].split('|')[0].rstrip(',-')
-                info['model'] = model.strip()
+                info['model'] = after_brand
             break
-    
-    # Если марка не найдена в первой строке, ищем везде в тексте
-    if info['brand'] == '—':
-        for brand in CAR_BRANDS:
-            if brand.lower() in text.lower():
-                info['brand'] = brand
-                break
     
     # Состояние (отличное, хорошее, удовлетворительное и т.д.)
     condition_match = re.search(r'(?:состояние|condition)[\s:]*([^\n,]+)', text, re.IGNORECASE)
@@ -105,9 +102,9 @@ def parse_car_info(text: str) -> dict:
         info['drive'] = 'Полный'
     
     # Пробег (цифры + км/mi)
-    mileage_match = re.search(r'(\d[\d\s]*)\s*(?:км|mi|miles|миль)', text, re.IGNORECASE)
+    mileage_match = re.search(r'(\d+(?:[.,]\d+)*)\s*(?:км|km|mi|miles|миль)', text, re.IGNORECASE)
     if mileage_match:
-        info['mileage'] = mileage_match.group(0)
+        info['mileage'] = mileage_match.group(0).replace('.', '').replace(',', '')
     
     # Цена - ищем строку которая содержит цену (например "Цена: 50000 $")
     # Сначала ищем все строки с ценой
@@ -178,6 +175,11 @@ def parse_car_info(text: str) -> dict:
                         info['price'] = price_value
             else:
                 info['price'] = price_value
+    
+    # Ищем курс (например "79₽/USDT" или "79 ₽/USDT")
+    exchange_rate_match = re.search(r'(\d+(?:[.,]\d+)?)\s*₽\s*/\s*(?:USDT|USD)', text, re.IGNORECASE)
+    if exchange_rate_match:
+        info['exchange_rate'] = exchange_rate_match.group(1)
     
     return info
 
