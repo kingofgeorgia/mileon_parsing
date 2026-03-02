@@ -1,182 +1,161 @@
-# Telegram Auto Monitoring & Relay System
+# MileON Telegram Relay
 
-A Python-based Telegram monitoring and content relay system that automatically filters and republishes car listings across channels based on specified criteria.
+Автоматический релей объявлений из Telegram-канала с фильтрацией по марке/цене, генерацией текста через OpenAI и публикацией в целевой канал.
 
-## Features
+## Что делает скрипт
 
-- **Real-time Monitoring**: Live dashboard displaying filtered car listings from multiple Telegram channels
-- **Automatic Filtering**: Smart filtering by car brand and price range
-- **Content Relay**: Automatically fetch, format, and republish matched listings to target channels
-- **Multiple Channels**: Monitor and relay from multiple source channels simultaneously
-- **Web API Integration**: FastAPI-based REST API for programmatic access
-- **Bot Notifications**: Telegram bot integration for real-time alerts
-- **Session Persistence**: Maintains authentication sessions across runs
+- Читает новые сообщения из `SOURCE_CHANNEL`
+- Отбирает только объявления с маркой + ценой
+- Обрабатывает фото/альбомы (видео пропускает)
+- Формирует structured payload для OpenAI
+- Генерирует финальный текст по шаблону MileON Cars
+- Публикует в `TARGET_CHANNEL`
+- Ведёт дедупликацию через `posted_ids.json`
 
-## Project Structure
+## Текущая конфигурация
 
-### Components
+В `parsing.py` сейчас используются:
 
-1. **parsing.py** - Relay Client
-   - Automatically fetches messages from source channels
-   - Filters content by brand and price criteria
-   - Formats and republishes to target channels
-   - Maintains deduplication with message ID tracking
+- `SOURCE_CHANNEL = "garageneva"`
+- `TARGET_CHANNEL = "mileoncars"`
+- `OPENAI_MODEL = "gpt-5-mini"` (зафиксировано)
+- `UPDATE_INTERVAL = 20`
 
-## Installation
+## Установка
 
-### Prerequisites
-- Python 3.8+
-- Telegram account with API credentials
-- OpenAI API key (optional, for advanced features)
-
-### Setup
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/kingofgeorgia/mileon_parsing.git
-cd mileon_parsing
+pip install telethon openai currency-converter-free
 ```
 
-2. Install dependencies:
-```bash
-pip install telethon rich fastapi python-telebot openai
+## Настройка ключей
+
+Скрипт берёт OpenAI-ключ в таком порядке:
+
+1. Переменная окружения `OPENAI_API_KEY`
+2. Файл `openai_api_key.txt` в корне проекта
+
+Пример для PowerShell (текущая сессия):
+
+```powershell
+$env:OPENAI_API_KEY="your_key_here"
 ```
 
-3. Configure your API credentials in any module:
-```python
-api_id = YOUR_API_ID
-api_hash = "YOUR_API_HASH"
+Или создайте файл `openai_api_key.txt`:
+
+```text
+your_key_here
 ```
 
-Get your Telegram API credentials at [https://my.telegram.org/apps](https://my.telegram.org/apps)
+## Запуск
 
-## Configuration
-
-Edit the configuration section at the top of each module:
-
-```python
-# Telegram API
-api_id = 34277624
-api_hash = "3906edabc2198a97d68878633496809d"
-
-# Channels
-SOURCE_CHANNEL = "mileoncars"
-TARGET_CHANNEL = "garagesale_dighomi"
-
-# Filtering
-CAR_BRANDS = ["BMW", "Mercedes", "Toyota", "Audi", "Porsche"]
-CURRENCIES = ["$", "€", "₽", "USD", "EUR"]
-
-# Polling
-UPDATE_INTERVAL = 20  # seconds
-```
-
-### Filter Configuration
-
-- **CAR_BRANDS**: List of car brands to monitor (case-insensitive)
-- **CURRENCIES**: Accepted currency symbols for price detection
-- **PRICE_PATTERN**: Regex for price extraction (default: `\d[\d\s]{3,}`)
-
-## Usage
-
-### Run Relay Client
 ```bash
 python parsing.py
 ```
-Continuously monitors source channels and relays matching listings.
 
-## Architecture
+## Фоновый запуск без окна (Windows)
 
-```
-Telegram Channels (source)
-  ↓ (GetHistoryRequest via Telethon)
-Channel Messages (raw)
-  ↓ (match_filters: brand + price)
-Filtered Messages
-  ↓ (format_message: markdown + metadata)
-Target Channel / Dashboard / API / Notifications
+Чтобы скрипт работал в фоне и не показывал консольное окно, используй Task Scheduler.
+
+1. Открой PowerShell **от имени администратора**
+2. Выполни:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_hidden_task.ps1
 ```
 
-### Data Flow
+Что будет сделано:
 
-1. **Fetch**: Retrieve latest messages from source channels
-2. **Filter**: Match against brand and price criteria (AND condition)
-3. **Format**: Convert to markdown with metadata and emoji
-4. **Relay**: Post to target channel or dashboard
-5. **Deduplicate**: Track message IDs to prevent reposts
+- установится скрытая задача `MileON-Parsing-Hidden`
+- автозапуск при старте Windows и при входе пользователя
+- запуск через `pythonw.exe` (без окна)
+- автоперезапуск при падении
+- логи в `logs/relay_background.log`
 
-## Filtering Logic
+Проверка статуса задачи:
 
-Messages must match **both** conditions to be included:
-- Contains one of the specified car brands
-- Contains a price in the specified currency format
-
-```python
-def match_filters(text: str) -> bool:
-    if not text:
-        return False
-    if not any(brand.lower() in text.lower() for brand in CAR_BRANDS):
-        return False
-    if not PRICE_PATTERN.search(text):
-        return False
-    return True
+```powershell
+Get-ScheduledTask -TaskName "MileON-Parsing-Hidden" | Get-ScheduledTaskInfo
 ```
 
-## Dependencies
+Удаление задачи:
 
+```powershell
+Unregister-ScheduledTask -TaskName "MileON-Parsing-Hidden" -Confirm:$false
 ```
-telethon>=1.0        # Telegram client library
-openai>=0.27         # OpenAI integration
+
+Быстрое управление задачей:
+
+```powershell
+# Интерактивное меню действий (без -Action)
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1
+
+# Установка задачи
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action install
+
+# Удаление задачи
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action uninstall
+
+# Статус
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action status
+
+# Запуск
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action start
+
+# Остановка
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action stop
+
+# Перезапуск
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action restart
+
+# Последние строки лога
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action logs -Tail 80
+
+# Диагностика (задача + процессы + ошибки в логе)
+powershell -ExecutionPolicy Bypass -File .\scripts\task_control.ps1 -Action doctor
 ```
 
-## Session Management
+## Логика порядка публикации
 
-Each module creates persistent session files:
-- `relay_client.session` - Parsing client session
-- `session_name.session` - Live monitor session
+- Новые сообщения сначала собираются до первого уже опубликованного
+- Затем публикуются от старых к новым
+- Если на объявлении возникает ошибка (API/отправка), текущий батч останавливается,
+  чтобы не нарушить порядок и не пропустить старое объявление
 
-Sessions preserve authentication. Delete to force re-authentication on next run.
+## Dry-run скрипты
 
-## Troubleshooting
+- `_dry_run_last_message.py` — тест последнего объявления без публикации и без сохранения ID
+- `_dry_run_verbose.py` — подробный тест (raw text, sanitized text, payload, ответ API)
 
-### Session Authentication Issues
-Delete the `.session` file and restart the module to re-authenticate via QR code.
+## Формат данных для OpenAI
 
-### Empty Message History
-- Verify channel is public/accessible
-- Check API credentials (api_id, api_hash)
-- Ensure account has channel access permissions
+В API передаётся JSON с полями:
 
-### Duplicate Posts
-The relay client tracks posted message IDs in `posted_ids` set. Clear this to reprocess.
+- `brand`
+- `model`
+- `year`
+- `engine_volume`
+- `power`
+- `drive`
+- `mileage`
+- `price_local`
+- `price_russia`
+- `currency`
+- `extras`
 
-### Telethon Connection Timeouts
-The module auto-retries. Check internet connection and Telegram API status.
+Правило валют:
 
-### Filter Not Working
-- Verify CAR_BRANDS contains correct brand names
-- Check PRICE_PATTERN regex matches message prices
-- Ensure filters use AND logic (both brand AND price required)
+- `price_local` всегда передаётся в `USD`
+- `price_russia` всегда передаётся в `RUB`
+- если исходная цена в другой валюте, перед отправкой выполняется конвертация по актуальному курсу
 
-## Code Style
+## Важные файлы
 
-- Russian comments throughout (documentation sections)
-- Configuration marked with section headers
-- Raw strings for regex patterns: `r"pattern"`
-- Message text safely accessed via `.text` attribute
+- `parsing.py` — основной рабочий скрипт
+- `posted_ids.json` — база уже опубликованных ID
+- `openai_api_key.txt` — файл ключа OpenAI (опционально)
 
-## Contributing
+## Примечания
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/improvement`)
-3. Commit your changes (`git commit -am 'Add improvement'`)
-4. Push to the branch (`git push origin feature/improvement`)
-5. Open a Pull Request
-
-## License
-
-This project is provided as-is for personal use.
-
-## Support
-
-For issues and questions, open an issue on [GitHub](https://github.com/kingofgeorgia/mileon_parsing/issues).
+- Если `OPENAI_API_KEY` не найден, публикация не выполняется
+- Сессии Telegram хранятся в `.session` файлах
+- Для повторной авторизации можно удалить соответствующий `.session` файл
